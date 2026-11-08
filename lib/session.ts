@@ -22,17 +22,23 @@ function sign(payload: string): string {
   return createHmac("sha256", `${process.env.AUTH_SECRET}:${process.env.ADMIN_PASSWORD}`).update(payload).digest("base64url");
 }
 
-export function createSessionToken(now = Date.now()): string {
-  const exp = String(Math.floor(now / 1000) + MAX_AGE_SECONDS);
-  return `${exp}.${sign(exp)}`;
+/** `version` é a versão da senha: quando a senha muda no banco, as sessões antigas deixam de valer. */
+export function createSessionToken(version = 0, now = Date.now()): string {
+  const payload = `${Math.floor(now / 1000) + MAX_AGE_SECONDS}.${version}`;
+  return `${payload}.${sign(payload)}`;
+}
+
+/** Confere assinatura e validade. Quem pode consultar o banco ainda compara a versão devolvida. */
+export function readSessionToken(token: string | undefined, now = Date.now()): { version: number } | null {
+  if (!token || !authConfigured()) return null;
+  const [exp, version, sig] = token.split(".");
+  if (!exp || !version || !sig || !/^\d+$/.test(exp) || !/^\d+$/.test(version)) return null;
+  const expected = Buffer.from(sign(`${exp}.${version}`));
+  const given = Buffer.from(sig);
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+  return Number(exp) * 1000 > now ? { version: Number(version) } : null;
 }
 
 export function verifySessionToken(token: string | undefined, now = Date.now()): boolean {
-  if (!token || !authConfigured()) return false;
-  const [exp, sig] = token.split(".");
-  if (!exp || !sig || !/^\d+$/.test(exp)) return false;
-  const expected = Buffer.from(sign(exp));
-  const given = Buffer.from(sig);
-  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return false;
-  return Number(exp) * 1000 > now;
+  return readSessionToken(token, now) !== null;
 }

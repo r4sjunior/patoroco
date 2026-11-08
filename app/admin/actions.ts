@@ -7,7 +7,8 @@ import { addManualEntry, closeCash, openCash } from "@/lib/cash";
 import { rateLimit, saveProduct, saveSettings, saveZone, setStoreOpen } from "@/lib/catalog";
 import { parseMoney, parseQty, UserError, type ActionResult, type OrderStatus, type PaymentMethod } from "@/lib/format";
 import { advanceOrder, cancelOrder, counterSale } from "@/lib/orders";
-import { authConfigured, createSessionToken, passwordMatches, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
+import { changeAdminPassword, checkAdminPassword, passwordVersion } from "@/lib/password";
+import { authConfigured, createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
 import { moveStock, saveStockItem } from "@/lib/stock";
 import { requireAdmin } from "./auth";
 
@@ -39,6 +40,17 @@ async function run(fn: () => Promise<void>): Promise<ActionResult> {
 }
 
 /* ---------- Sessão ---------- */
+async function setSessionCookie(version: number) {
+  const h = await headers();
+  (await cookies()).set(SESSION_COOKIE, createSessionToken(version), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production" && h.get("x-forwarded-proto") !== "http",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  });
+}
+
 export async function loginAction(fd: FormData): Promise<ActionResult> {
   if (!authConfigured()) return { error: "Defina ADMIN_PASSWORD e AUTH_SECRET nas variáveis de ambiente." };
   const h = await headers();
@@ -46,16 +58,21 @@ export async function loginAction(fd: FormData): Promise<ActionResult> {
   if (!(await rateLimit(`login:${ip}`, 8, 900))) {
     return { error: "Muitas tentativas. Aguarde 15 minutos." };
   }
-  if (!passwordMatches(String(fd.get("password") ?? ""))) return { error: "Senha incorreta." };
-  const store = await cookies();
-  store.set(SESSION_COOKIE, createSessionToken(), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production" && h.get("x-forwarded-proto") !== "http",
-    path: "/",
-    maxAge: SESSION_MAX_AGE,
-  });
+  if (!(await checkAdminPassword(String(fd.get("password") ?? "")))) return { error: "Senha incorreta." };
+  await setSessionCookie(await passwordVersion());
   redirect("/admin");
+}
+
+export async function changePasswordAction(fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const h = await headers();
+    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+    if (!(await rateLimit(`senha:${ip}`, 8, 900))) throw new UserError("Muitas tentativas. Aguarde 15 minutos.");
+    // Sem trim: espaço também faz parte da senha.
+    const version = await changeAdminPassword(String(fd.get("current") ?? ""), String(fd.get("next") ?? ""), String(fd.get("confirm") ?? ""));
+    // Mantém conectado só quem trocou; os outros aparelhos precisam entrar de novo.
+    await setSessionCookie(version);
+  });
 }
 
 export async function logoutAction(): Promise<void> {

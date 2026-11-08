@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { ActionForm } from "@/components/action-form";
 import { getSettings, listZones } from "@/lib/catalog";
-import { saveSettingsAction, saveZoneAction, setStoreOpenAction } from "../../actions";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password";
+import { changePasswordAction, saveSettingsAction, saveZoneAction, setStoreOpenAction } from "../../actions";
 
 export const metadata: Metadata = { title: "Ajustes" };
 
@@ -72,6 +73,26 @@ export default async function AjustesPage() {
             <button className="btn btn-primary">Adicionar</button>
           </ActionForm>
         </div>
+      </section>
+
+      <section className="card">
+        <h2>Senha do admin</h2>
+        <p className="muted">Ao trocar, os outros aparelhos conectados saem e precisam entrar com a senha nova.</p>
+        <ActionForm action={changePasswordAction} className="grid-form" resetOnSuccess successMessage="Senha alterada.">
+          <label className="field field-wide">
+            Senha atual
+            <input type="password" name="current" required autoComplete="current-password" />
+          </label>
+          <label className="field">
+            Nova senha
+            <input type="password" name="next" required minLength={MIN_PASSWORD_LENGTH} maxLength={200} autoComplete="new-password" />
+          </label>
+          <label className="field">
+            Repita a nova senha
+            <input type="password" name="confirm" required minLength={MIN_PASSWORD_LENGTH} maxLength={200} autoComplete="new-password" />
+          </label>
+          <button className="btn btn-primary">Trocar senha</button>
+        </ActionForm>
       </section>
     </>
   );

@@ -11,6 +11,7 @@ export function ActionForm({
   confirm: confirmText,
   resetOnSuccess,
   onSuccess,
+  successMessage,
 }: {
   action: (fd: FormData) => Promise<ActionResult>;
   children: ReactNode;
@@ -18,8 +19,10 @@ export function ActionForm({
   confirm?: string;
   resetOnSuccess?: boolean;
   onSuccess?: () => void;
+  successMessage?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [succeeded, setSucceeded] = useState(false);
   const [pending, start] = useTransition();
   const ref = useRef<HTMLFormElement>(null);
 
@@ -34,6 +37,7 @@ export function ActionForm({
         const message = submitter?.dataset.confirm ?? confirmText;
         if (message && !window.confirm(message)) return;
         setError(null);
+        setSucceeded(false);
         start(async () => {
           try {
             const result = await action(fd);
@@ -41,6 +45,7 @@ export function ActionForm({
               setError(result.error);
             } else {
               if (resetOnSuccess) ref.current?.reset();
+              setSucceeded(true);
               onSuccess?.();
             }
           } catch {
@@ -55,6 +60,11 @@ export function ActionForm({
       {error && (
         <p className="form-err" role="alert">
           {error}
+        </p>
+      )}
+      {succeeded && successMessage && (
+        <p className="form-ok" role="status">
+          {successMessage}
         </p>
       )}
     </form>

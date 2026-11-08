@@ -10,7 +10,8 @@ import { query } from "../lib/db";
 import { localDay, parseMoney, parseQty, UserError } from "../lib/format";
 import { advanceOrder, cancelOrder, counterSale, getOrderByToken, placeOnlineOrder, type OnlineOrderInput } from "../lib/orders";
 import { salesReport } from "../lib/reports";
-import { createSessionToken, passwordMatches, verifySessionToken } from "../lib/session";
+import { changeAdminPassword, checkAdminPassword, passwordVersion } from "../lib/password";
+import { createSessionToken, passwordMatches, readSessionToken, verifySessionToken } from "../lib/session";
 import { listStock, moveStock } from "../lib/stock";
 
 const pedido = (extra: Partial<OnlineOrderInput> = {}): OnlineOrderInput => ({
@@ -194,6 +195,35 @@ test("sessão do admin: assinatura, validade e troca de senha", () => {
   process.env.ADMIN_PASSWORD = "outra";
   assert.equal(verifySessionToken(token), false);
   process.env.ADMIN_PASSWORD = "senha-de-teste";
+});
+
+test("troca de senha do admin", async () => {
+  const antiga = "senha-de-teste";
+  const nova = "senha-nova-123";
+  assert.equal(await passwordVersion(), 0);
+  const sessaoAntiga = readSessionToken(createSessionToken(0));
+  assert.equal(sessaoAntiga?.version, 0);
+
+  await assert.rejects(changeAdminPassword("errada", nova, nova), /atual está incorreta/);
+  await assert.rejects(changeAdminPassword(antiga, "curta", "curta"), /pelo menos 8/);
+  await assert.rejects(changeAdminPassword(antiga, nova, "diferente"), /confirmação/);
+  await assert.rejects(changeAdminPassword(antiga, antiga, antiga), /diferente da atual/);
+  assert.equal(await passwordVersion(), 0, "tentativas recusadas não mudam nada");
+  assert.equal(await checkAdminPassword(antiga), true);
+
+  const versao = await changeAdminPassword(antiga, nova, nova);
+  assert.equal(versao, 1);
+  assert.equal(await checkAdminPassword(nova), true);
+  assert.equal(await checkAdminPassword(antiga), false, "a senha antiga da variável deixa de valer");
+  assert.notEqual(sessaoAntiga?.version, await passwordVersion(), "sessão antiga fica inválida");
+  assert.equal(readSessionToken(createSessionToken(versao))?.version, versao);
+
+  const [{ hash }] = await query<{ hash: string }>(`SELECT admin_password_hash AS hash FROM settings`);
+  assert.ok(hash.startsWith("scrypt$") && !hash.includes(nova), "guarda só o hash");
+
+  // Recuperação documentada no README: limpar o hash volta para a variável
+  await query(`UPDATE settings SET admin_password_hash = NULL`);
+  assert.equal(await checkAdminPassword(antiga), true);
 });
 
 test("conversão de valores digitados", () => {

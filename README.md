@@ -37,6 +37,16 @@ Sem `DATABASE_URL`, o app cria sozinho um banco local em `.data/`. Para recomeç
 
 A venda só entra no caixa quando o pedido é concluído, por isso concluir exige caixa aberto. Cancelar devolve o estoque e, se já tinha sido recebido, lança o estorno.
 
+## Senha do admin
+
+A primeira senha é a variável `ADMIN_PASSWORD`. Depois de trocá-la em **Ajustes → Senha do admin**, passa a valer a nova, guardada no banco como hash, e a da variável deixa de funcionar.
+
+Esqueceu a senha? No console do banco (Neon → SQL Editor), rode o comando abaixo. A senha volta a ser a de `ADMIN_PASSWORD`, que você pode redefinir na Vercel (a variável nova só vale após um novo deploy).
+
+```sql
+UPDATE settings SET admin_password_hash = NULL, admin_password_version = admin_password_version + 1;
+```
+
 ## Comandos
 
 | Comando | O que faz |

@@ -133,4 +133,10 @@ export const MIGRATIONS: string[] = [
   INSERT INTO product_recipe (product_id, stock_item_id, quantity)
     SELECT 1, id, 1 FROM stock_items;
   `,
+  // Senha trocada pelo admin. NULL = continua valendo a variável ADMIN_PASSWORD.
+  `
+  ALTER TABLE settings
+    ADD COLUMN admin_password_hash text,
+    ADD COLUMN admin_password_version int NOT NULL DEFAULT 0;
+  `,
 ];
